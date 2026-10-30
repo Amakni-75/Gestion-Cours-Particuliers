@@ -10,24 +10,41 @@ l'application, mais n'ont pas accès aux données privées des comptes.
 
 1. Créez un projet Supabase et ouvrez son **SQL Editor**.
 2. Exécutez le contenu de [`supabase_schema.sql`](./supabase_schema.sql).
-3. Dans les paramètres d'authentification Supabase, activez les inscriptions
-   par e-mail et configurez l'URL de votre site GitHub Pages comme URL du site
-   et URL de redirection autorisée. Configurez la confirmation d'adresse e-mail
-   selon les règles de votre organisation.
+3. Dans **Authentication > URL Configuration**, définissez l'URL du site et
+   ajoutez l'URL exacte `https://amakni-75.github.io/Gestion-Cours-Particuliers/`
+   aux URL de redirection autorisées. Cette URL doit être autorisée pour que
+   les liens de confirmation reviennent sur GitHub Pages, et non sur une URL
+   locale comme `http://localhost:3000`. Activez les inscriptions par e-mail
+   et configurez la confirmation d'adresse e-mail selon les règles de votre
+   organisation.
 4. Dans **Project Settings > API**, copiez l'URL du projet et la clé
    **publishable** (ou l'ancienne clé `anon`) dans [`supabase-config.js`](./supabase-config.js).
    Cette clé est destinée au navigateur ; n'y mettez jamais la clé
    `service_role`.
-5. Publiez `gestion_de_cours_particuliersV3.html` et `supabase-config.js` dans
-   le dépôt GitHub, puis activez **Settings > Pages** sur la branche et le
-   dossier souhaités. Les deux fichiers doivent être servis depuis le même
-   dossier.
+5. Publiez `index.html` et `supabase-config.js` dans le dépôt GitHub, puis
+   activez **Settings > Pages** sur la branche et le dossier souhaités. `index.html`
+   est la page d'entrée de l'URL GitHub Pages ; les deux fichiers doivent être
+   servis depuis le même dossier. Si le fichier de configuration change après
+   publication, incrémentez son paramètre `?v=...` dans la balise script du HTML
+   afin d'éviter une ancienne configuration conservée dans le cache du navigateur.
 6. Créez le compte de l'administrateur depuis l'application et confirmez son
    adresse e-mail. Dans le SQL Editor Supabase, exécutez la requête de
    promotion commentée à la fin de `supabase_schema.sql`, en remplaçant
    l'adresse d'exemple par celle du compte administrateur.
 7. Les utilisateurs créent leur compte depuis l'application, confirment leur
    e-mail si demandé, puis attendent l'approbation de l'administrateur.
+   Si un lien de confirmation affiche `otp_expired`, demandez-en un nouveau
+   dans l'application et utilisez le dernier e-mail reçu : un lien expiré ou
+   déjà utilisé ne peut pas être réutilisé.
+
+## Installation sur Android
+
+L'application est installable comme PWA depuis Chrome après publication des
+fichiers `index.html`, `manifest.webmanifest`, `service-worker.js` et du dossier
+`icons/`. Ouvrez l'URL GitHub Pages sur Android, puis choisissez **Installer
+l'application** ou **Ajouter à l'écran d'accueil** dans le menu Chrome.
+La page mise en cache peut s'ouvrir hors connexion, mais l'authentification et
+la synchronisation Supabase nécessitent Internet.
 
 ## Données existantes
 
