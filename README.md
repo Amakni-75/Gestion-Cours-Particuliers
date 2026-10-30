@@ -6,6 +6,12 @@ accéder qu'à ses propres élèves, matières, séances et échéances. Les
 administrateurs approuvent ou refusent les nouvelles inscriptions depuis
 l'application, mais n'ont pas accès aux données privées des comptes.
 
+Après connexion, la navigation sépare le tableau de bord, les élèves, les
+matières et les séances/paiements. Les fiches élèves permettent de modifier
+leur nom et de gérer leurs matières et tarifs ; le catalogue permet de créer,
+renommer et supprimer les matières. L'écran **Adhésions** est réservé aux
+administrateurs et centralise l'approbation des comptes.
+
 ## Mise en service
 
 1. Créez un projet Supabase et ouvrez son **SQL Editor**.

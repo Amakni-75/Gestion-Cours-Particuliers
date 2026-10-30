@@ -101,6 +101,25 @@
     <section id="approvalPendingNotice" class="hidden bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 text-sm">
       <i class="fa-solid fa-hourglass-half mr-2"></i>Votre inscription est en attente de validation par un administrateur.
     </section>
+    <nav id="appNavigation" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-2" aria-label="Navigation principale">
+      <div class="flex gap-2 overflow-x-auto">
+        <button type="button" data-screen="dashboard" onclick="navigateApp('dashboard')" class="app-nav-button whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold">
+          <i class="fa-solid fa-chart-pie mr-2"></i>Tableau de bord
+        </button>
+        <button type="button" data-screen="students" onclick="navigateApp('students')" class="app-nav-button whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold">
+          <i class="fa-solid fa-user-graduate mr-2"></i>Élèves
+        </button>
+        <button type="button" data-screen="subjects" onclick="navigateApp('subjects')" class="app-nav-button whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold">
+          <i class="fa-solid fa-book-open mr-2"></i>Matières
+        </button>
+        <button type="button" data-screen="sessions" onclick="navigateApp('sessions')" class="app-nav-button whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold">
+          <i class="fa-solid fa-calendar-days mr-2"></i>Séances & paiements
+        </button>
+        <button id="adminNavigationButton" type="button" data-screen="memberships" onclick="navigateApp('memberships')" class="app-nav-button hidden whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold">
+          <i class="fa-solid fa-user-shield mr-2"></i>Adhésions
+        </button>
+      </div>
+    </nav>
     <section id="adminPendingUsers" class="hidden bg-white rounded-xl shadow-sm border border-indigo-200 p-5">
       <div class="flex justify-between items-center mb-3">
         <h2 class="text-lg font-bold text-slate-800"><i class="fa-solid fa-user-shield text-indigo-600 mr-2"></i>Validation des comptes</h2>
@@ -110,7 +129,7 @@
     </section>
 
     <!-- DASHBOARD ANALYTIQUE DES DÉPENSES -->
-    <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+    <section id="dashboardScreen" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5 pb-3 border-b border-slate-100">
         <div>
           <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -189,13 +208,13 @@
     </section>
 
     <!-- Content Grid (Élèves & Échéances / Calendrier) -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div id="recordsGrid" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
       <!-- Left Column: Élèves & Échéances -->
-      <section class="lg:col-span-1 space-y-6 flex flex-col">
+      <section id="recordsColumn" class="lg:col-span-1 space-y-6 flex flex-col">
 
         <!-- Catalogue des matières -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+        <div id="catalogSubjectsCard" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
           <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
             <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
               <i class="fa-solid fa-book-open text-emerald-600"></i> Catalogue des Matières
@@ -204,13 +223,13 @@
               <i class="fa-solid fa-plus text-xs"></i> Ajouter
             </button>
           </div>
-          <div id="catalogSubjectsList" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+          <div id="catalogSubjectsList" class="space-y-2">
             <!-- Injecté dynamiquement -->
           </div>
         </div>
         
         <!-- Card: Élèves & Honoraires -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+        <div id="studentsCard" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
           <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
             <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
               <i class="fa-solid fa-users text-indigo-600"></i> Élèves & Honoraires
@@ -220,13 +239,13 @@
             </button>
           </div>
 
-          <div id="studentsList" class="space-y-4 max-h-[380px] overflow-y-auto pr-1">
+          <div id="studentsList" class="space-y-4">
             <!-- Dynamically injected -->
           </div>
         </div>
 
         <!-- Card: Échéances de Paiement (4 Séances) -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex-1">
+        <div id="paymentsCard" class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex-1">
           <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
             <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
               <i class="fa-solid fa-receipt text-indigo-600"></i> Échéances (4 Séances)
@@ -241,7 +260,7 @@
       </section>
 
       <!-- Right Column: Calendrier Mensuel -->
-      <section class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col">
+      <section id="calendarCard" class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col">
         
         <!-- Calendar Header -->
         <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
@@ -282,19 +301,20 @@
   <div id="studentModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
     <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
       <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-bold text-slate-800">Ajouter un Élève</h3>
+        <h3 id="studentModalTitle" class="text-lg font-bold text-slate-800">Ajouter un Élève</h3>
         <button onclick="closeModal('studentModal')" class="text-slate-400 hover:text-slate-600 p-1">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
       <form id="studentForm" onsubmit="saveStudent(event)">
+        <input type="hidden" id="studentId">
         <div class="mb-4">
           <label class="block text-sm font-medium text-slate-700 mb-1">Nom & Prénom de l'élève</label>
           <input type="text" id="studentName" required placeholder="ex: Mohamed Trabelsi" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800">
         </div>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" onclick="closeModal('studentModal')" class="px-4 py-2 border rounded-lg text-slate-600 hover:bg-slate-50 font-medium text-sm">Annuler</button>
-          <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm shadow-sm">Enregistrer</button>
+          <button id="studentSubmitButton" type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm shadow-sm">Enregistrer</button>
         </div>
       </form>
     </div>
@@ -331,19 +351,20 @@
   <div id="catalogSubjectModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
     <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 transform transition-all">
       <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-bold text-slate-800">Nouvelle Matière</h3>
+        <h3 id="catalogSubjectModalTitle" class="text-lg font-bold text-slate-800">Nouvelle Matière</h3>
         <button onclick="closeModal('catalogSubjectModal')" class="text-slate-400 hover:text-slate-600 p-1" aria-label="Fermer">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
       <form id="catalogSubjectForm" onsubmit="saveCatalogSubject(event)">
+        <input type="hidden" id="catalogSubjectId">
         <div class="mb-4">
           <label for="catalogSubjectName" class="block text-sm font-medium text-slate-700 mb-1">Nom de la matière</label>
           <input type="text" id="catalogSubjectName" required placeholder="ex: Mathématiques, Physique..." class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800">
         </div>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" onclick="closeModal('catalogSubjectModal')" class="px-4 py-2 border rounded-lg text-slate-600 hover:bg-slate-50 font-medium text-sm">Annuler</button>
-          <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium text-sm shadow-sm">Créer la matière</button>
+          <button id="catalogSubjectSubmitButton" type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium text-sm shadow-sm">Créer la matière</button>
         </div>
       </form>
     </div>
@@ -426,6 +447,7 @@
     let currentDate = new Date();
     let dashboardMonths = [];
     let dashboardStudent = 'all';
+    let activeAppScreen = 'dashboard';
 
     function showAuthMessage(message, isError = false) {
       const element = document.getElementById('authMessage');
@@ -441,6 +463,41 @@
 
     function getAppRedirectUrl() {
       return `${window.location.origin}${window.location.pathname}`;
+    }
+
+    function navigateApp(screen) {
+      const allowedScreens = ['dashboard', 'students', 'subjects', 'sessions', 'memberships'];
+      if (!allowedScreens.includes(screen) || (screen === 'memberships' && currentProfile?.role !== 'admin')) {
+        return;
+      }
+
+      activeAppScreen = screen;
+      document.getElementById('dashboardScreen').classList.toggle('hidden', screen !== 'dashboard');
+      document.getElementById('recordsGrid').classList.toggle(
+        'hidden',
+        !['students', 'subjects', 'sessions'].includes(screen)
+      );
+      document.getElementById('recordsColumn').classList.toggle('hidden', screen === 'sessions');
+      document.getElementById('studentsCard').classList.toggle('hidden', screen !== 'students');
+      document.getElementById('catalogSubjectsCard').classList.toggle('hidden', screen !== 'subjects');
+      document.getElementById('paymentsCard').classList.toggle('hidden', screen !== 'sessions');
+      document.getElementById('calendarCard').classList.toggle('hidden', screen !== 'sessions');
+      document.getElementById('adminPendingUsers').classList.toggle('hidden', screen !== 'memberships');
+      document.getElementById('recordsGrid').classList.toggle('lg:grid-cols-1', screen !== 'sessions');
+      document.getElementById('recordsGrid').classList.toggle('lg:grid-cols-3', screen === 'sessions');
+      document.getElementById('calendarCard').classList.toggle('lg:col-span-2', screen === 'sessions');
+      document.getElementById('recordsColumn').classList.toggle('lg:col-span-1', screen !== 'sessions');
+      document.getElementById('appNavigation').classList.remove('hidden');
+
+      document.querySelectorAll('.app-nav-button').forEach(button => {
+        const isActive = button.dataset.screen === screen;
+        button.classList.toggle('bg-indigo-600', isActive);
+        button.classList.toggle('text-white', isActive);
+        button.classList.toggle('text-slate-600', !isActive);
+        button.classList.toggle('hover:bg-slate-100', !isActive);
+        if (isActive) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      });
     }
 
     async function authenticate(event) {
@@ -548,9 +605,11 @@
       document.getElementById('signOutButton').classList.remove('flex');
       document.getElementById('currentUserLabel').classList.add('hidden');
       document.getElementById('appActions').classList.add('hidden');
+      document.getElementById('appNavigation').classList.add('hidden');
       document.getElementById('pendingSignOutButton').classList.add('hidden');
       document.getElementById('refreshApprovalButton').classList.add('hidden');
       document.getElementById('authForm').classList.remove('hidden');
+      activeAppScreen = 'dashboard';
     }
 
     async function handleSession(session) {
@@ -604,6 +663,8 @@
       document.getElementById('signOutButton').classList.add('flex');
       document.getElementById('appActions').classList.remove('hidden');
       document.getElementById('appActions').classList.add('flex');
+      document.getElementById('adminNavigationButton').classList.toggle('hidden', profile.role !== 'admin');
+      navigateApp(profile.role === 'admin' && activeAppScreen === 'memberships' ? 'memberships' : 'dashboard');
       await loadUserData();
       subscribeToUserData();
       if (profile.role === 'admin') {
@@ -1066,8 +1127,13 @@
     }
 
     // Students Management
-    function openAddStudentModal() {
+    function openAddStudentModal(studentId = null) {
+      const student = studentId ? state.students.find(item => item.id === studentId) : null;
+      document.getElementById('studentId').value = student?.id || '';
       document.getElementById('studentName').value = '';
+      document.getElementById('studentModalTitle').innerText = student ? "Modifier un élève" : "Ajouter un élève";
+      document.getElementById('studentSubmitButton').innerText = student ? "Enregistrer les modifications" : "Enregistrer";
+      if (student) document.getElementById('studentName').value = student.name;
       openModal('studentModal');
       setTimeout(() => document.getElementById('studentName').focus(), 100);
     }
@@ -1078,16 +1144,22 @@
       const name = nameInput.value.trim();
       if (!name) return;
 
-      const newStudent = {
-        id: Date.now().toString(),
-        name: name,
-        subjects: []
-      };
+      const studentId = document.getElementById('studentId').value;
+      const existingStudent = state.students.find(student => student.id === studentId);
+      if (existingStudent) {
+        existingStudent.name = name;
+        showToast(`Élève ${name} modifié(e).`);
+      } else {
+        state.students.push({
+          id: Date.now().toString(),
+          name,
+          subjects: []
+        });
+        showToast(`Élève ${name} ajouté(e) avec succès !`);
+      }
 
-      state.students.push(newStudent);
       saveData();
       closeModal('studentModal');
-      showToast(`Élève ${name} ajouté(e) avec succès !`);
     }
 
     function deleteStudent(id) {
@@ -1101,8 +1173,13 @@
     }
 
     // Subject catalog and student assignments
-    function openAddCatalogSubjectModal() {
+    function openAddCatalogSubjectModal(subjectId = null) {
       document.getElementById('catalogSubjectForm').reset();
+      const subject = subjectId ? state.subjects.find(item => item.id === subjectId) : null;
+      document.getElementById('catalogSubjectId').value = subject?.id || '';
+      document.getElementById('catalogSubjectName').value = subject?.name || '';
+      document.getElementById('catalogSubjectModalTitle').innerText = subject ? "Modifier une matière" : "Nouvelle Matière";
+      document.getElementById('catalogSubjectSubmitButton').innerText = subject ? "Enregistrer les modifications" : "Créer la matière";
       openModal('catalogSubjectModal');
       setTimeout(() => document.getElementById('catalogSubjectName').focus(), 100);
     }
@@ -1111,16 +1188,29 @@
       e.preventDefault();
       const name = document.getElementById('catalogSubjectName').value.trim();
       if (!name) return;
+      const subjectId = document.getElementById('catalogSubjectId').value;
 
-      if (state.subjects.some(subject => subject.name.toLocaleLowerCase('fr') === name.toLocaleLowerCase('fr'))) {
+      if (state.subjects.some(subject => subject.id !== subjectId
+        && subject.name.toLocaleLowerCase('fr') === name.toLocaleLowerCase('fr'))) {
         showToast("Cette matière existe déjà dans le catalogue.", true);
         return;
       }
 
-      state.subjects.push({ id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name });
+      const existingSubject = state.subjects.find(subject => subject.id === subjectId);
+      if (existingSubject) {
+        existingSubject.name = name;
+        state.students.forEach(student => {
+          student.subjects.forEach(assignment => {
+            if (assignment.id === subjectId) assignment.name = name;
+          });
+        });
+        showToast(`Matière ${name} modifiée.`);
+      } else {
+        state.subjects.push({ id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, name });
+        showToast(`Matière ${name} ajoutée au catalogue.`);
+      }
       saveData();
       closeModal('catalogSubjectModal');
-      showToast(`Matière ${name} ajoutée au catalogue.`);
     }
 
     function deleteCatalogSubject(subjectId) {
@@ -1533,6 +1623,9 @@
               <button onclick="openAddSubjectModal('${s.id}')" class="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-semibold px-2 py-1 rounded-md transition" title="Affecter une matière">
                   + Affecter matière
               </button>
+              <button onclick="openAddStudentModal('${s.id}')" class="text-slate-400 hover:text-indigo-600 p-1 transition" title="Modifier l'élève" aria-label="Modifier ${escapeHTML(s.name)}">
+                <i class="fa-solid fa-pen"></i>
+              </button>
               <button onclick="deleteStudent('${s.id}')" class="text-xs text-slate-400 hover:text-rose-600 p-1 transition" title="Supprimer l'élève">
                 <i class="fa-solid fa-trash-can"></i>
               </button>
@@ -1574,6 +1667,9 @@
             <span class="font-medium text-slate-700">${escapeHTML(subject.name)}</span>
             <div class="flex items-center gap-2">
               <span class="text-xs text-slate-500">${assignedCount} élève${assignedCount > 1 ? 's' : ''}</span>
+              <button onclick="openAddCatalogSubjectModal('${subject.id}')" class="text-slate-400 hover:text-indigo-600 p-1 transition" title="Modifier la matière" aria-label="Modifier ${escapeHTML(subject.name)}">
+                <i class="fa-solid fa-pen"></i>
+              </button>
               <button onclick="deleteCatalogSubject('${subject.id}')" class="text-slate-400 hover:text-rose-600 p-1 transition" title="Supprimer du catalogue" aria-label="Supprimer ${escapeHTML(subject.name)} du catalogue">
                 <i class="fa-solid fa-trash-can"></i>
               </button>
