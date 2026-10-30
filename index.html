@@ -88,6 +88,7 @@
         </div>
       </form>
       <p id="authMessage" role="status" class="hidden mt-4 text-sm rounded-lg p-3"></p>
+      <button id="resendConfirmationButton" type="button" onclick="resendConfirmationEmail()" class="w-full mt-3 text-sm text-indigo-600 hover:text-indigo-800 underline">Renvoyer l'e-mail de confirmation</button>
       <button id="pendingSignOutButton" type="button" onclick="signOut()" class="hidden w-full mt-3 text-sm text-slate-600 hover:text-slate-900 underline">Se déconnecter</button>
       <button id="refreshApprovalButton" type="button" onclick="refreshApproval()" class="hidden w-full mt-3 text-sm text-indigo-600 hover:text-indigo-800 underline">Vérifier mon accès</button>
     </div>
@@ -435,6 +436,10 @@
       return error?.message || "Une erreur inattendue est survenue.";
     }
 
+    function getAppRedirectUrl() {
+      return `${window.location.origin}${window.location.pathname}`;
+    }
+
     async function authenticate(event) {
       event.preventDefault();
       if (!supabaseClient) return showAuthMessage("Configurez Supabase dans supabase-config.js avant de vous connecter.", true);
@@ -455,7 +460,11 @@
       const email = document.getElementById('authEmail').value.trim();
       const password = document.getElementById('authPassword').value;
       try {
-        const { data, error } = await supabaseClient.auth.signUp({ email, password });
+        const { data, error } = await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: getAppRedirectUrl() }
+        });
         if (error) {
           showAuthMessage(`Création du compte impossible : ${getSupabaseError(error)}`, true);
           return;
@@ -467,6 +476,32 @@
         }
       } catch (error) {
         showAuthMessage(`Création du compte impossible : ${getSupabaseError(error)}`, true);
+      }
+    }
+
+    async function resendConfirmationEmail() {
+      if (!supabaseClient) {
+        showAuthMessage("Configurez Supabase dans supabase-config.js avant de demander un lien de confirmation.", true);
+        return;
+      }
+      const email = document.getElementById('authEmail').value.trim();
+      if (!email) {
+        showAuthMessage("Saisissez votre adresse e-mail avant de demander un nouveau lien.", true);
+        return;
+      }
+      try {
+        const { error } = await supabaseClient.auth.resend({
+          type: 'signup',
+          email,
+          options: { emailRedirectTo: getAppRedirectUrl() }
+        });
+        if (error) {
+          showAuthMessage(`Renvoi impossible : ${getSupabaseError(error)}`, true);
+          return;
+        }
+        showAuthMessage("Un nouveau lien de confirmation a été envoyé. Utilisez le dernier e-mail reçu : les anciens liens peuvent expirer ou avoir déjà été utilisés.");
+      } catch (error) {
+        showAuthMessage(`Renvoi impossible : ${getSupabaseError(error)}`, true);
       }
     }
 
