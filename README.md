@@ -6,11 +6,13 @@ accéder qu'à ses propres élèves, matières, séances et échéances. Les
 administrateurs approuvent ou refusent les nouvelles inscriptions depuis
 l'application, mais n'ont pas accès aux données privées des comptes.
 
-Après connexion, la navigation sépare le tableau de bord, les élèves, les
-matières et les séances/paiements. Les fiches élèves permettent de modifier
-leur nom et de gérer leurs matières et tarifs ; le catalogue permet de créer,
-renommer et supprimer les matières. L'écran **Adhésions** est réservé aux
-administrateurs et centralise l'approbation des comptes.
+Après connexion, le tableau de bord réunit les dépenses, le calendrier des
+séances et les échéances de paiement ; ses filtres par mois et par élève
+s'appliquent à ces trois vues. La navigation donne aussi accès aux écrans
+Élèves, Matières et Séances & paiements. Les fiches élèves permettent de
+modifier leur nom et de gérer leurs matières et tarifs ; le catalogue permet
+de créer, renommer et supprimer les matières. L'écran **Adhésions** est réservé
+aux administrateurs et centralise l'approbation des comptes.
 
 ## Mise en service
 

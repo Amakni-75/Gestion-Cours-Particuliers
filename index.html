@@ -135,7 +135,7 @@
           <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
             <i class="fa-solid fa-chart-pie text-indigo-600"></i> Tableau de bord des Dépenses (TND)
           </h2>
-          <p class="text-xs text-slate-500">Filtrez les dépenses par mois, élève et matière</p>
+          <p class="text-xs text-slate-500">Filtrez les dépenses, le calendrier et les échéances par mois et élève</p>
         </div>
         
         <!-- Total Global Card -->
@@ -472,21 +472,22 @@
       }
 
       activeAppScreen = screen;
+      const showCalendarAndPayments = ['dashboard', 'sessions'].includes(screen);
       document.getElementById('dashboardScreen').classList.toggle('hidden', screen !== 'dashboard');
       document.getElementById('recordsGrid').classList.toggle(
         'hidden',
-        !['students', 'subjects', 'sessions'].includes(screen)
+        !['dashboard', 'students', 'subjects', 'sessions'].includes(screen)
       );
-      document.getElementById('recordsColumn').classList.toggle('hidden', screen === 'sessions');
+      document.getElementById('recordsColumn').classList.remove('hidden');
       document.getElementById('studentsCard').classList.toggle('hidden', screen !== 'students');
       document.getElementById('catalogSubjectsCard').classList.toggle('hidden', screen !== 'subjects');
-      document.getElementById('paymentsCard').classList.toggle('hidden', screen !== 'sessions');
-      document.getElementById('calendarCard').classList.toggle('hidden', screen !== 'sessions');
+      document.getElementById('paymentsCard').classList.toggle('hidden', !showCalendarAndPayments);
+      document.getElementById('calendarCard').classList.toggle('hidden', !showCalendarAndPayments);
       document.getElementById('adminPendingUsers').classList.toggle('hidden', screen !== 'memberships');
-      document.getElementById('recordsGrid').classList.toggle('lg:grid-cols-1', screen !== 'sessions');
-      document.getElementById('recordsGrid').classList.toggle('lg:grid-cols-3', screen === 'sessions');
-      document.getElementById('calendarCard').classList.toggle('lg:col-span-2', screen === 'sessions');
-      document.getElementById('recordsColumn').classList.toggle('lg:col-span-1', screen !== 'sessions');
+      document.getElementById('recordsGrid').classList.toggle('lg:grid-cols-1', !showCalendarAndPayments);
+      document.getElementById('recordsGrid').classList.toggle('lg:grid-cols-3', showCalendarAndPayments);
+      document.getElementById('calendarCard').classList.toggle('lg:col-span-2', showCalendarAndPayments);
+      document.getElementById('recordsColumn').classList.toggle('lg:col-span-1', showCalendarAndPayments);
       document.getElementById('appNavigation').classList.remove('hidden');
 
       document.querySelectorAll('.app-nav-button').forEach(button => {
@@ -1679,6 +1680,11 @@
       }).join('');
     }
 
+    function matchesDashboardFilters(session) {
+      return (dashboardStudent === 'all' || session.studentId === dashboardStudent)
+        && (dashboardMonths.length === 0 || dashboardMonths.includes(session.date.substring(0, 7)));
+    }
+
     function renderCalendar(index = buildRenderIndex()) {
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
@@ -1708,10 +1714,7 @@
       // Day cells
       for (let day = 1; day <= totalDays; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const daySessions = (index.sessionsByDate.get(dateStr) || []).filter(session =>
-          (dashboardStudent === 'all' || session.studentId === dashboardStudent)
-          && (dashboardMonths.length === 0 || dashboardMonths.includes(session.date.substring(0, 7)))
-        );
+        const daySessions = (index.sessionsByDate.get(dateStr) || []).filter(matchesDashboardFilters);
         const isToday = dateStr === todayStr;
 
         let sessionsBadges = daySessions.map(s => {
@@ -1761,14 +1764,16 @@
           .slice()
           .sort((a,b) => new Date(a.date) - new Date(b.date));
 
-        if (studentSessions.length === 0) return;
+        if (studentSessions.length === 0
+          || (dashboardStudent !== 'all' && student.id !== dashboardStudent)) return;
 
         // Group into blocks of 4
         const totalBlocks = Math.ceil(studentSessions.length / 4);
 
         for (let i = 0; i < totalBlocks; i++) {
-          totalEcheancesCount++;
           const blockSessions = studentSessions.slice(i * 4, (i + 1) * 4);
+          if (!blockSessions.some(matchesDashboardFilters)) continue;
+          totalEcheancesCount++;
           const paymentKey = `${student.id}_block_${i}`;
           const isPaid = !!state.payments[paymentKey];
 
