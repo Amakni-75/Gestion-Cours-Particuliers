@@ -875,6 +875,35 @@
       });
     }
 
+    function getStudentSessionCycles(sessions) {
+      const sessionsBySubject = new Map();
+      sessions.forEach(session => {
+        if (!sessionsBySubject.has(session.subjectId)) sessionsBySubject.set(session.subjectId, []);
+        sessionsBySubject.get(session.subjectId).push(session);
+      });
+
+      const subjectIds = [...sessionsBySubject.keys()].sort();
+      const cycles = [];
+      let cycleNumber = 0;
+
+      subjectIds.forEach(subjectId => {
+        const subjectSessions = sessionsBySubject.get(subjectId);
+        if (!subjectSessions) return;
+        subjectSessions.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+        for (let offset = 0; offset < subjectSessions.length; offset += 4) {
+          cycleNumber++;
+          cycles.push({
+            cycleNumber,
+            subjectCycleNumber: Math.floor(offset / 4) + 1,
+            subjectId,
+            sessions: subjectSessions.slice(offset, offset + 4)
+          });
+        }
+      });
+
+      return cycles;
+    }
+
     function buildUserDataRows(snapshot) {
       const ownerId = currentUser.id;
       const studentRows = snapshot.students.map(student => ({
@@ -895,9 +924,9 @@
       const sessionRows = [];
       snapshot.students.forEach(student => {
         const sessions = snapshot.sessions.filter(session => session.studentId === student.id)
-          .slice().sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-        for (let offset = 0; offset < sessions.length; offset += 4) {
-          const cycleNumber = Math.floor(offset / 4) + 1;
+          .slice();
+        getStudentSessionCycles(sessions).forEach(cycle => {
+          const cycleNumber = cycle.cycleNumber;
           const paymentCycleId = `${ownerId}:${student.id}:block:${cycleNumber}`;
           const paymentKey = `${student.id}_block_${cycleNumber - 1}`;
           cycleRows.push({
@@ -907,7 +936,7 @@
             cycle_number: cycleNumber,
             is_paid: Boolean(snapshot.payments[paymentKey])
           });
-          sessions.slice(offset, offset + 4).forEach(session => {
+          cycle.sessions.forEach(session => {
             sessionRows.push({
               session_id: session.id,
               owner_id: ownerId,
@@ -921,7 +950,7 @@
               ))
             });
           });
-        }
+        });
       });
       return { studentRows, subjectRows, assignmentRows, cycleRows, sessionRows };
     }
@@ -1759,49 +1788,40 @@
       }
 
       state.students.forEach(student => {
-        // Sessions sorted chronologically
         const studentSessions = (index.sessionsByStudent.get(student.id) || [])
-          .slice()
-          .sort((a,b) => new Date(a.date) - new Date(b.date));
+          .slice();
 
         if (studentSessions.length === 0
           || (dashboardStudent !== 'all' && student.id !== dashboardStudent)) return;
 
-        // Group into blocks of 4
-        const totalBlocks = Math.ceil(studentSessions.length / 4);
-
-        for (let i = 0; i < totalBlocks; i++) {
-          const blockSessions = studentSessions.slice(i * 4, (i + 1) * 4);
-          if (!blockSessions.some(matchesDashboardFilters)) continue;
+        getStudentSessionCycles(studentSessions).forEach(cycle => {
+          const blockSessions = cycle.sessions;
+          if (!blockSessions.some(matchesDashboardFilters)) return;
           totalEcheancesCount++;
-          const paymentKey = `${student.id}_block_${i}`;
+          const paymentKey = `${student.id}_block_${cycle.cycleNumber - 1}`;
           const isPaid = !!state.payments[paymentKey];
 
-          // Calculate total price for block
           const totalAmount = blockSessions.reduce((sum, s) => {
             const subject = index.subjectsByStudent.get(student.id)?.get(s.subjectId)
               || index.subjectsById.get(s.subjectId);
             return sum + getSessionPrice(s, subject);
           }, 0);
-          const blockSubjectNames = [...new Set(blockSessions.map(session =>
-            index.subjectsByStudent.get(student.id)?.get(session.subjectId)?.name
-              || index.subjectsById.get(session.subjectId)?.name
-              || 'Matière inconnue'
-          ))];
-
           const isComplete = blockSessions.length === 4;
+          const subjectName = index.subjectsByStudent.get(student.id)?.get(cycle.subjectId)?.name
+            || index.subjectsById.get(cycle.subjectId)?.name
+            || 'Matière inconnue';
 
           echeances.push(`
             <div class="border rounded-xl p-3 transition shadow-2xs ${isPaid ? 'bg-emerald-50/60 border-emerald-200' : isComplete ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50 border-slate-200'}">
               <div class="flex justify-between items-center mb-1">
                 <span class="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                  <i class="fa-solid fa-layer-group text-slate-400 text-[10px]"></i> ${escapeHTML(student.name)} - Échéance ${i + 1}
+                  <i class="fa-solid fa-layer-group text-slate-400 text-[10px]"></i> ${escapeHTML(student.name)} - ${escapeHTML(subjectName)} - Échéance ${cycle.subjectCycleNumber}
                 </span>
                 <span class="text-xs font-bold ${isPaid ? 'text-emerald-700' : 'text-slate-800'}">${totalAmount.toFixed(2)} TND</span>
               </div>
               <p class="text-[11px] text-slate-600 mb-2">
-                <span class="font-semibold">Matière${blockSubjectNames.length > 1 ? 's' : ''} :</span>
-                ${blockSubjectNames.map(escapeHTML).join(', ')}
+                <span class="font-semibold">Matière :</span>
+                ${escapeHTML(subjectName)}
               </p>
               <div class="flex justify-between items-center text-[11px] text-slate-500 mb-2">
                 <span>${blockSessions.length} / 4 séances effectuées</span>
@@ -1814,7 +1834,7 @@
               </button>
             </div>
           `);
-        }
+        });
       });
 
       countLabel.innerText = totalEcheancesCount.toString();
