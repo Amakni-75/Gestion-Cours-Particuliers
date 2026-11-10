@@ -45,9 +45,69 @@ aux administrateurs et centralise l'approbation des comptes.
    dans l'application et utilisez le dernier e-mail reçu : un lien expiré ou
    déjà utilisé ne peut pas être réutilisé.
 
-## Installation sur Android
+   ## Rappels de séance par e-mail
 
-L'application est installable comme PWA depuis Chrome après publication des
+   Chaque séance enregistrée peut déclencher un rappel à l'adresse e-mail de
+   l'élève ou du parent, environ 24 heures puis 2 heures avant son début. Saisissez
+   l'adresse dans la fiche de l'élève et l'heure lors de l'ajout ou de la
+   modification de chaque séance. Les anciennes séances n'ont pas d'heure :
+   modifiez-les pour leur en attribuer une avant qu'elles puissent déclencher un
+   rappel. Les séances récurrentes doivent actuellement être enregistrées une par
+   une.
+
+   L'envoi fonctionne même lorsque l'application est fermée : il nécessite une
+   fonction Supabase Edge planifiée et un compte d'envoi [Resend](https://resend.com/)
+   avec une adresse expéditrice vérifiée. Après avoir mis à jour le schéma avec
+   [`supabase_schema.sql`](./supabase_schema.sql), configurez les secrets et
+   déployez la fonction depuis la racine du projet avec la CLI Supabase :
+
+   ```powershell
+   supabase login
+   supabase link --project-ref <project-ref>
+   supabase secrets set RESEND_API_KEY=<cle-resend> REMINDER_CRON_SECRET=<secret-aleatoire> REMINDER_FROM_EMAIL="Cours particuliers <rappels@votre-domaine.tld>"
+   supabase functions deploy send-session-reminders --no-verify-jwt
+   ```
+
+   Le secret `REMINDER_CRON_SECRET` doit être identique dans la configuration de la
+   fonction et dans Vault. Ne l'ajoutez jamais au code du site. Dans le tableau de
+   bord Supabase, activez les extensions `pg_cron`, `pg_net` et `supabase_vault`,
+   puis exécutez dans le SQL Editor (en remplaçant les deux valeurs indiquées) :
+
+   ```sql
+   select vault.create_secret(
+     'https://<project-ref>.supabase.co/functions/v1/send-session-reminders',
+     'session-reminder-function-url'
+   );
+   select vault.create_secret('<secret-aleatoire>', 'session-reminder-cron-secret');
+
+   select cron.schedule(
+     'session-reminders-every-five-minutes',
+     '*/5 * * * *',
+     $$
+     select net.http_post(
+       url := (
+         select decrypted_secret from vault.decrypted_secrets
+         where name = 'session-reminder-function-url'
+       ),
+       headers := jsonb_build_object(
+         'Content-Type', 'application/json',
+         'x-reminder-secret', (
+           select decrypted_secret from vault.decrypted_secrets
+           where name = 'session-reminder-cron-secret'
+         )
+       ),
+       body := '{}'::jsonb
+     );
+     $$
+   );
+   ```
+
+   La planification vérifie les rappels toutes les cinq minutes. Les séances déjà
+   enregistrées sans heure ou sans adresse e-mail ne sont pas envoyées.
+
+   ## Installation sur Android
+
+   L'application est installable comme PWA depuis Chrome après publication des
 fichiers `index.html`, `manifest.webmanifest`, `service-worker.js` et du dossier
 `icons/`. Ouvrez l'URL GitHub Pages sur Android, puis choisissez **Installer
 l'application** ou **Ajouter à l'écran d'accueil** dans le menu Chrome.
