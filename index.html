@@ -312,6 +312,11 @@
           <label class="block text-sm font-medium text-slate-700 mb-1">Nom & Prénom de l'élève</label>
           <input type="text" id="studentName" required placeholder="ex: Mohamed Trabelsi" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800">
         </div>
+        <div class="mb-4">
+          <label for="studentEmail" class="block text-sm font-medium text-slate-700 mb-1">E-mail de l'élève ou du parent</label>
+          <input type="email" id="studentEmail" autocomplete="email" placeholder="ex: parent@example.com" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800">
+          <p class="text-xs text-slate-500 mt-1">Utilisé pour les rappels par e-mail 24 h et 2 h avant une séance.</p>
+        </div>
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" onclick="closeModal('studentModal')" class="px-4 py-2 border rounded-lg text-slate-600 hover:bg-slate-50 font-medium text-sm">Annuler</button>
           <button id="studentSubmitButton" type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm shadow-sm">Enregistrer</button>
@@ -398,6 +403,11 @@
           <select id="sessionSubject" onchange="syncDefaultRateForSession()" required class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 text-sm">
             <!-- Injecté par JS -->
           </select>
+        </div>
+
+        <div class="mb-3">
+          <label for="sessionTime" class="block text-xs font-bold text-slate-600 uppercase mb-1">Heure de la séance</label>
+          <input type="time" id="sessionTime" required class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 outline-none text-slate-800 text-sm">
         </div>
 
         <div class="mb-3">
@@ -762,7 +772,9 @@
       ));
       const [studentRows, subjectRows, assignmentRows, sessionRows, cycleRows] = rows;
 
-      state.students = studentRows.map(row => ({ id: row.student_id, name: row.full_name, subjects: [] }));
+      state.students = studentRows.map(row => ({
+        id: row.student_id, name: row.full_name, email: row.email || '', subjects: []
+      }));
       state.subjects = subjectRows.map(row => ({ id: row.subject_id, name: row.name }));
       const studentsById = new Map(state.students.map(student => [student.id, student]));
       assignmentRows.forEach(row => {
@@ -773,6 +785,8 @@
       state.sessions = sessionRows.map(row => ({
         id: row.session_id,
         date: row.session_date,
+        startAt: row.start_at,
+        timeZone: row.session_timezone,
         studentId: row.student_id,
         subjectId: row.subject_id,
         rate: row.rate_millimes / 1000
@@ -907,7 +921,7 @@
     function buildUserDataRows(snapshot) {
       const ownerId = currentUser.id;
       const studentRows = snapshot.students.map(student => ({
-        student_id: student.id, owner_id: ownerId, full_name: student.name
+        student_id: student.id, owner_id: ownerId, full_name: student.name, email: student.email || null
       }));
       const subjectRows = snapshot.subjects.map(subject => ({
         subject_id: subject.id, owner_id: ownerId, name: subject.name
@@ -944,6 +958,8 @@
               subject_id: session.subjectId,
               payment_cycle_id: paymentCycleId,
               session_date: session.date,
+              start_at: session.startAt || null,
+              session_timezone: session.timeZone || null,
               rate_millimes: toMillimes(getSessionPrice(
                 session,
                 student.subjects.find(subject => subject.id === session.subjectId)
@@ -1161,9 +1177,13 @@
       const student = studentId ? state.students.find(item => item.id === studentId) : null;
       document.getElementById('studentId').value = student?.id || '';
       document.getElementById('studentName').value = '';
+      document.getElementById('studentEmail').value = '';
       document.getElementById('studentModalTitle').innerText = student ? "Modifier un élève" : "Ajouter un élève";
       document.getElementById('studentSubmitButton').innerText = student ? "Enregistrer les modifications" : "Enregistrer";
-      if (student) document.getElementById('studentName').value = student.name;
+      if (student) {
+        document.getElementById('studentName').value = student.name;
+        document.getElementById('studentEmail').value = student.email || '';
+      }
       openModal('studentModal');
       setTimeout(() => document.getElementById('studentName').focus(), 100);
     }
@@ -1172,17 +1192,20 @@
       e.preventDefault();
       const nameInput = document.getElementById('studentName');
       const name = nameInput.value.trim();
+      const email = document.getElementById('studentEmail').value.trim();
       if (!name) return;
 
       const studentId = document.getElementById('studentId').value;
       const existingStudent = state.students.find(student => student.id === studentId);
       if (existingStudent) {
         existingStudent.name = name;
+        existingStudent.email = email;
         showToast(`Élève ${name} modifié(e).`);
       } else {
         state.students.push({
           id: Date.now().toString(),
           name,
+          email,
           subjects: []
         });
         showToast(`Élève ${name} ajouté(e) avec succès !`);
@@ -1338,6 +1361,7 @@
     // Sessions & Calendar Modals
     function openSessionModal(dateStr) {
       document.getElementById('sessionDate').value = dateStr;
+      document.getElementById('sessionTime').value = '';
       resetSessionForm();
 
       const dateObj = new Date(dateStr + 'T00:00:00');
@@ -1407,6 +1431,11 @@
       }
     }
 
+    function getLocalTime(isoDate) {
+      const date = new Date(isoDate);
+      return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+
     function editSession(sessionId) {
       const sess = state.sessions.find(s => s.id === sessionId);
       if (!sess) return;
@@ -1416,6 +1445,7 @@
       updateSubjectOptions();
       document.getElementById('sessionSubject').value = sess.subjectId;
       document.getElementById('sessionCustomRate').value = sess.rate;
+      document.getElementById('sessionTime').value = sess.startAt ? getLocalTime(sess.startAt) : '';
 
       document.getElementById('submitSessionText').innerText = "Mettre à jour séance";
       document.getElementById('cancelSessionEditBtn').classList.remove('hidden');
@@ -1427,10 +1457,17 @@
       const editId = document.getElementById('sessionEditId').value;
       const studentId = document.getElementById('sessionStudent').value;
       const subjectId = document.getElementById('sessionSubject').value;
+      const time = document.getElementById('sessionTime').value;
       const customRate = parseFloat(document.getElementById('sessionCustomRate').value);
 
-      if (!studentId || !subjectId || isNaN(customRate)) {
+      if (!studentId || !subjectId || !time || isNaN(customRate)) {
         showToast("Saisie invalide pour la séance.", true);
+        return;
+      }
+
+      const startAt = new Date(`${date}T${time}`);
+      if (Number.isNaN(startAt.getTime())) {
+        showToast("Heure invalide pour la séance.", true);
         return;
       }
 
@@ -1440,6 +1477,8 @@
         if (sess) {
           sess.studentId = studentId;
           sess.subjectId = subjectId;
+          sess.startAt = startAt.toISOString();
+          sess.timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
           sess.rate = customRate;
           showToast("Séance mise à jour !");
         }
@@ -1448,6 +1487,8 @@
         state.sessions.push({
           id: 'sess_' + Date.now(),
           date: date,
+          startAt: startAt.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           studentId: studentId,
           subjectId: subjectId,
           rate: customRate
@@ -1486,6 +1527,8 @@
           <div class="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200 text-xs shadow-sm">
             <div>
               <span class="font-bold text-slate-800">${escapeHTML(student ? student.name : 'Inconnu')}</span>
+              <span class="text-slate-400 font-normal"> • </span>
+              <span class="text-slate-500">${s.startAt ? escapeHTML(getLocalTime(s.startAt)) : 'Heure à définir'}</span>
               <span class="text-slate-400 font-normal"> • </span>
               <span class="text-indigo-600 font-medium">${escapeHTML(subject ? subject.name : 'Inconnu')}</span>
               <span class="text-emerald-600 font-bold ml-1">(${sessionPrice} TND)</span>
@@ -1859,6 +1902,7 @@
       state.students.forEach(s => {
         xml += `    <student id="${s.id}">\n`;
         xml += `      <name>${escapeXML(s.name)}</name>\n`;
+        xml += `      <email>${escapeXML(s.email || '')}</email>\n`;
         xml += `      <subjects>\n`;
         if (s.subjects) {
           s.subjects.forEach(sub => {
@@ -1877,6 +1921,8 @@
       state.sessions.forEach(s => {
         xml += `    <session id="${s.id}">\n`;
         xml += `      <date>${s.date}</date>\n`;
+        xml += `      <time>${s.startAt ? getLocalTime(s.startAt) : ''}</time>\n`;
+        xml += `      <timeZone>${escapeXML(s.timeZone || '')}</timeZone>\n`;
         xml += `      <studentId>${s.studentId}</studentId>\n`;
         xml += `      <subjectId>${s.subjectId}</subjectId>\n`;
         xml += `      <rate>${s.rate !== undefined ? s.rate : ''}</rate>\n`;
@@ -1891,13 +1937,14 @@
     }
 
     function exportCSV() {
-      let csv = "Date;Eleve;Matiere;Tarif_TND\n";
+      let csv = "Date;Heure;Eleve;Matiere;Tarif_TND\n";
       state.sessions.forEach(s => {
         const student = state.students.find(st => st.id === s.studentId);
         const subject = student?.subjects.find(sub => sub.id === s.subjectId)
           || state.subjects.find(item => item.id === s.subjectId);
         const price = s.rate !== undefined ? s.rate : (subject ? subject.rate : 0);
-        csv += `"${s.date}";"${student?.name || ''}";"${subject?.name || ''}";"${price}"\n`;
+        const time = s.startAt ? getLocalTime(s.startAt) : '';
+        csv += `"${s.date}";"${time}";"${student?.name || ''}";"${subject?.name || ''}";"${price}"\n`;
       });
       downloadFile(csv, 'seances_cours_tnd.csv', 'text/csv;charset=utf-8;');
       showToast("Fichier CSV généré avec succès !");
@@ -1925,6 +1972,7 @@
             const st = studentNodes[i];
             const id = st.getAttribute("id");
             const name = st.getElementsByTagName("name")[0].textContent;
+            const email = st.getElementsByTagName("email")[0]?.textContent || '';
 
             const subjects = [];
             const subNodes = st.getElementsByTagName("subject");
@@ -1937,7 +1985,7 @@
               });
             }
 
-            newStudents.push({ id, name, subjects });
+            newStudents.push({ id, name, email, subjects });
           }
 
           const newSessions = [];
@@ -1946,10 +1994,17 @@
             const se = sessionNodes[i];
             const rateNode = se.getElementsByTagName("rate")[0];
             const rateVal = rateNode && rateNode.textContent ? parseFloat(rateNode.textContent) : undefined;
+            const date = se.getElementsByTagName("date")[0].textContent;
+            const time = se.getElementsByTagName("time")[0]?.textContent;
+            const startAt = time ? new Date(`${date}T${time}`).toISOString() : null;
+            const timeZone = se.getElementsByTagName("timeZone")[0]?.textContent
+              || (time ? Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' : null);
 
             newSessions.push({
               id: se.getAttribute("id"),
-              date: se.getElementsByTagName("date")[0].textContent,
+              date,
+              startAt,
+              timeZone,
               studentId: se.getElementsByTagName("studentId")[0].textContent,
               subjectId: se.getElementsByTagName("subjectId")[0].textContent,
               rate: rateVal
