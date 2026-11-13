@@ -1,0 +1,9 @@
+# Student PII — NEVER publish (GitHub Pages serves the whole repo)
+.private/
+
+# Local history / superseded drafts — kept locally, not published
+archive/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
