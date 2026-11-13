@@ -1,6 +1,8 @@
-const CACHE_NAME = 'cours-particuliers-pwa-v1';
+const CACHE_NAME = 'cours-particuliers-pwa-v2';
 const APP_SHELL = [
   new URL('./index.html', self.registration.scope),
+  new URL('./app.js', self.registration.scope),
+  new URL('./supabase-config.js', self.registration.scope),
   new URL('./manifest.webmanifest', self.registration.scope),
   new URL('./icons/app-icon-192.png', self.registration.scope),
   new URL('./icons/app-icon-512.png', self.registration.scope),
