@@ -352,9 +352,32 @@
         subjectId: row.subject_id,
         rate: row.rate_millimes / 1000
       }));
+      // Reconstruction des paiements à partir de l'appartenance des séances, et non
+      // du numéro de cycle stocké. Tolère l'ancien format de payment_cycle_id comme
+      // le nouveau : les paiements existants sont ainsi migrés automatiquement.
+      const paidByCycleId = new Map();
+      cycleRows.forEach(row => paidByCycleId.set(row.payment_cycle_id, row.is_paid === true));
+      const subjectGroups = new Map();
+      sessionRows.forEach(row => {
+        const gkey = `${row.student_id}::${row.subject_id}`;
+        let group = subjectGroups.get(gkey);
+        if (!group) {
+          group = { studentId: row.student_id, subjectId: row.subject_id, items: [] };
+          subjectGroups.set(gkey, group);
+        }
+        group.items.push({ date: row.session_date, id: row.session_id, cycleId: row.payment_cycle_id });
+      });
       state.payments = {};
-      cycleRows.forEach(row => {
-        state.payments[`${row.student_id}_block_${row.cycle_number - 1}`] = row.is_paid;
+      subjectGroups.forEach(group => {
+        group.items.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+        for (let offset = 0; offset < group.items.length; offset += 4) {
+          const chunk = group.items.slice(offset, offset + 4);
+          const subjectCycleNumber = Math.floor(offset / 4) + 1;
+          // Conservateur : réglé seulement si toutes les séances du cycle provenaient
+          // d'un cycle déjà réglé (évite de marquer « payé » par erreur).
+          const paid = chunk.every(s => paidByCycleId.get(s.cycleId) === true);
+          state.payments[cyclePaymentKey(group.studentId, group.subjectId, subjectCycleNumber)] = paid;
+        }
       });
 
       const hasData = studentRows.length || subjectRows.length || sessionRows.length;
@@ -479,6 +502,48 @@
       return cycles;
     }
 
+    // Identité STABLE d'un cycle de paiement : par (élève, matière, numéro de cycle
+    // local à la matière). Ainsi, ajouter une séance à une matière ne renumérote
+    // jamais les cycles d'une autre matière (les paiements restent bien attachés).
+    function cyclePaymentKey(studentId, subjectId, subjectCycleNumber) {
+      return `${studentId}::${subjectId}::cycle${subjectCycleNumber}`;
+    }
+    function cyclePaymentId(ownerId, studentId, subjectId, subjectCycleNumber) {
+      return `${ownerId}:${studentId}:${subjectId}:cycle:${subjectCycleNumber}`;
+    }
+
+    // Cycles d'une matière donnée pour un élève (chunks de 4, triés par date).
+    // Utilisé pour détecter si une séance touche une échéance déjà réglée.
+    function getSubjectCycles(studentId, subjectId, excludeSessionId) {
+      const subjectSessions = state.sessions
+        .filter(s => s.studentId === studentId && s.subjectId === subjectId
+          && s.id !== excludeSessionId)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+      const cycles = [];
+      for (let offset = 0; offset < subjectSessions.length; offset += 4) {
+        cycles.push({
+          subjectCycleNumber: Math.floor(offset / 4) + 1,
+          sessions: subjectSessions.slice(offset, offset + 4)
+        });
+      }
+      return cycles;
+    }
+
+    // Vrai si une séance datée `newDate` pour (élève, matière) tombe dans — ou avant —
+    // une échéance DÉJÀ RÉGLÉE de cette même matière (donc la recomposerait).
+    // Une séance strictement postérieure à toutes les échéances réglées renvoie faux.
+    function sessionAffectsPaidCycle(studentId, subjectId, newDate, excludeSessionId) {
+      let boundaryDate = null;
+      getSubjectCycles(studentId, subjectId, excludeSessionId).forEach(cycle => {
+        const key = cyclePaymentKey(studentId, subjectId, cycle.subjectCycleNumber);
+        if (state.payments[key] && cycle.sessions.length) {
+          const lastDate = cycle.sessions[cycle.sessions.length - 1].date;
+          if (boundaryDate === null || lastDate > boundaryDate) boundaryDate = lastDate;
+        }
+      });
+      return boundaryDate !== null && newDate <= boundaryDate;
+    }
+
     function buildUserDataRows(snapshot) {
       const ownerId = currentUser.id;
       const studentRows = snapshot.students.map(student => ({
@@ -501,14 +566,14 @@
         const sessions = snapshot.sessions.filter(session => session.studentId === student.id)
           .slice();
         getStudentSessionCycles(sessions).forEach(cycle => {
-          const cycleNumber = cycle.cycleNumber;
-          const paymentCycleId = `${ownerId}:${student.id}:block:${cycleNumber}`;
-          const paymentKey = `${student.id}_block_${cycleNumber - 1}`;
+          const paymentCycleId = cyclePaymentId(ownerId, student.id, cycle.subjectId, cycle.subjectCycleNumber);
+          const paymentKey = cyclePaymentKey(student.id, cycle.subjectId, cycle.subjectCycleNumber);
           cycleRows.push({
             payment_cycle_id: paymentCycleId,
             owner_id: ownerId,
             student_id: student.id,
-            cycle_number: cycleNumber,
+            subject_id: cycle.subjectId,
+            cycle_number: cycle.subjectCycleNumber,
             is_paid: Boolean(snapshot.payments[paymentKey])
           });
           cycle.sessions.forEach(session => {
@@ -1032,6 +1097,18 @@
         return;
       }
 
+      // Autre matière : aucun blocage. Même matière déjà réglée : on autorise, mais
+      // on avertit et on demande validation (l'échéance payée sera recomposée).
+      if (sessionAffectsPaidCycle(studentId, subjectId, date, editId || null)) {
+        const subjectName = (state.subjects.find(s => s.id === subjectId) || {}).name || 'cette matière';
+        const confirmed = confirm(
+          `Attention : la matière « ${subjectName} » a déjà une échéance réglée couvrant cette période.\n\n`
+          + `Ajouter/modifier cette séance antérieure va recomposer l'échéance payée (le détail et le montant des séances réglées peuvent changer).\n\n`
+          + `Voulez-vous continuer ?`
+        );
+        if (!confirmed) return;
+      }
+
       if (editId) {
         // Update Session
         const sess = state.sessions.find(s => s.id === editId);
@@ -1402,7 +1479,7 @@
           const blockSessions = cycle.sessions;
           if (!blockSessions.some(matchesDashboardFilters)) return;
           totalEcheancesCount++;
-          const paymentKey = `${student.id}_block_${cycle.cycleNumber - 1}`;
+          const paymentKey = cyclePaymentKey(student.id, cycle.subjectId, cycle.subjectCycleNumber);
           const isPaid = !!state.payments[paymentKey];
 
           const totalAmount = blockSessions.reduce((sum, s) => {

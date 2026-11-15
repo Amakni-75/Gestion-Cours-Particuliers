@@ -101,14 +101,34 @@ create table if not exists public.payment_cycles (
     payment_cycle_id text primary key,
     owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
     student_id text not null,
+    subject_id text,
     cycle_number integer not null check (cycle_number > 0),
     is_paid boolean not null default false,
     created_at timestamptz not null default now(),
-    unique (owner_id, student_id, cycle_number),
     unique (owner_id, payment_cycle_id),
     foreign key (owner_id, student_id)
         references public.students(owner_id, student_id) on delete cascade
 );
+
+-- Identité de cycle PAR MATIÈRE (élève + matière + n° de cycle local à la matière).
+-- Idempotent : s'applique aussi bien à une base vierge qu'à une base existante.
+-- Ajouter une séance à une matière ne renumérote plus les cycles d'une autre matière.
+alter table public.payment_cycles add column if not exists subject_id text;
+alter table public.payment_cycles
+    drop constraint if exists payment_cycles_owner_id_student_id_cycle_number_key;
+do $$
+begin
+    if not exists (
+        select 1 from pg_constraint
+        where conrelid = 'public.payment_cycles'::regclass
+          and conname = 'payment_cycles_owner_student_subject_cycle_key'
+    ) then
+        alter table public.payment_cycles
+            add constraint payment_cycles_owner_student_subject_cycle_key
+            unique (owner_id, student_id, subject_id, cycle_number);
+    end if;
+end;
+$$;
 
 create table if not exists public.sessions (
     session_id text primary key,
@@ -193,29 +213,26 @@ as $$
 declare
     cycle_count integer;
 begin
-    perform 1
-    from public.payment_cycles
-    where owner_id = new.owner_id
-      and payment_cycle_id = new.payment_cycle_id
-    for update;
-
+    -- Contrôle DIFFÉRÉ (au commit) : on compte l'état FINAL du cycle. Recomposer
+    -- un cycle (déplacer une séance d'un cycle à l'autre dans une même transaction)
+    -- ne déclenche donc plus d'erreur sur un dépassement transitoire à 5.
     select count(*) into cycle_count
     from public.sessions
     where owner_id = new.owner_id
-      and payment_cycle_id = new.payment_cycle_id
-      and session_id is distinct from new.session_id;
+      and payment_cycle_id = new.payment_cycle_id;
 
-    if cycle_count >= 4 then
-        raise exception 'A payment cycle cannot contain more than four sessions';
+    if cycle_count > 4 then
+        raise exception 'Un cycle de paiement ne peut pas contenir plus de quatre séances';
     end if;
 
-    return new;
+    return null;
 end;
 $$;
 
 drop trigger if exists sessions_max_four_per_cycle on public.sessions;
-create trigger sessions_max_four_per_cycle
-    before insert or update of owner_id, payment_cycle_id on public.sessions
+create constraint trigger sessions_max_four_per_cycle
+    after insert or update on public.sessions
+    deferrable initially deferred
     for each row execute function public.enforce_four_sessions_per_cycle();
 
 create or replace function public.payment_cycle_summary()
