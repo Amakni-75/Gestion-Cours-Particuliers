@@ -1138,15 +1138,22 @@
       const time = document.getElementById('sessionTime').value;
       const customRate = parseFloat(document.getElementById('sessionCustomRate').value);
 
-      if (!studentId || !subjectId || !time || isNaN(customRate)) {
+      if (!studentId || !subjectId || isNaN(customRate)) {
         showToast("Saisie invalide pour la séance.", true);
         return;
       }
 
-      const startAt = new Date(`${date}T${time}`);
-      if (Number.isNaN(startAt.getTime())) {
-        showToast("Heure invalide pour la séance.", true);
-        return;
+      // Heure facultative : sans heure, pas de start_at (ni de rappel e-mail).
+      let startAtIso = null;
+      let timeZone = null;
+      if (time) {
+        const startAt = new Date(`${date}T${time}`);
+        if (Number.isNaN(startAt.getTime())) {
+          showToast("Heure invalide pour la séance.", true);
+          return;
+        }
+        startAtIso = startAt.toISOString();
+        timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       }
 
       // Autre matière : aucun blocage. Même matière déjà réglée : on autorise, mais
@@ -1167,8 +1174,8 @@
         if (sess) {
           sess.studentId = studentId;
           sess.subjectId = subjectId;
-          sess.startAt = startAt.toISOString();
-          sess.timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+          sess.startAt = startAtIso;
+          sess.timeZone = timeZone;
           sess.rate = customRate;
           showToast("Séance mise à jour !");
         }
@@ -1177,8 +1184,8 @@
         state.sessions.push({
           id: 'sess_' + Date.now(),
           date: date,
-          startAt: startAt.toISOString(),
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          startAt: startAtIso,
+          timeZone: timeZone,
           studentId: studentId,
           subjectId: subjectId,
           rate: customRate
