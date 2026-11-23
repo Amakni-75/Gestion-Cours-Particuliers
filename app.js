@@ -10,7 +10,9 @@
     let currentUser = null;
     let currentProfile = null;
     let saveQueue = Promise.resolve();
-    let persistedState = null;
+    // Lignes réellement présentes en base (dernière lecture ou écriture réussie) :
+    // sert de référence pour ne pousser que les différences RÉELLES.
+    let persistedRows = null;
     let userDataChannel = null;
     let remoteRefreshTimer = null;
     let isSavingData = false;
@@ -169,7 +171,7 @@
       }
       currentUser = null;
       currentProfile = null;
-      persistedState = null;
+      persistedRows = null;
       state = { students: [], sessions: [], payments: {}, subjects: [] };
       document.getElementById('appContent').classList.add('hidden');
       document.getElementById('authScreen').classList.remove('hidden');
@@ -197,7 +199,7 @@
         }
         state = { students: [], sessions: [], payments: {}, subjects: [] };
         currentProfile = null;
-        persistedState = null;
+        persistedRows = null;
       }
       currentUser = session.user;
       if (currentProfile?.id === currentUser.id) return;
@@ -318,8 +320,51 @@
     }
 
     async function checkSupabaseResult(result, action) {
-      if (result.error) throw new Error(`${action} : ${getSupabaseError(result.error)}`);
+      if (result.error) {
+        const { message, details, hint, code } = result.error;
+        const extra = [details, hint, code && `code ${code}`].filter(Boolean).join(' — ');
+        throw new Error(`${action} : ${message || getSupabaseError(result.error)}${extra ? ` (${extra})` : ''}`);
+      }
       return result.data;
+    }
+
+    // Normalise les lignes lues en base dans la MÊME forme (mêmes clés, même ordre)
+    // que buildUserDataRows, pour une comparaison JSON fiable.
+    function toPersistedRows(studentRows, subjectRows, assignmentRows, cycleRows, sessionRows) {
+      return {
+        studentRows: studentRows.map(row => ({
+          student_id: row.student_id, owner_id: row.owner_id, full_name: row.full_name, email: row.email || null
+        })),
+        subjectRows: subjectRows.map(row => ({
+          subject_id: row.subject_id, owner_id: row.owner_id, name: row.name
+        })),
+        assignmentRows: assignmentRows.map(row => ({
+          assignment_id: row.assignment_id,
+          owner_id: row.owner_id,
+          student_id: row.student_id,
+          subject_id: row.subject_id,
+          rate_millimes: row.rate_millimes
+        })),
+        cycleRows: cycleRows.map(row => ({
+          payment_cycle_id: row.payment_cycle_id,
+          owner_id: row.owner_id,
+          student_id: row.student_id,
+          subject_id: row.subject_id ?? null,
+          cycle_number: row.cycle_number,
+          is_paid: row.is_paid === true
+        })),
+        sessionRows: sessionRows.map(row => ({
+          session_id: row.session_id,
+          owner_id: row.owner_id,
+          student_id: row.student_id,
+          subject_id: row.subject_id,
+          payment_cycle_id: row.payment_cycle_id,
+          session_date: row.session_date,
+          start_at: row.start_at || null,
+          session_timezone: row.session_timezone || null,
+          rate_millimes: row.rate_millimes
+        }))
+      };
     }
 
     async function loadUserData() {
@@ -390,9 +435,13 @@
         state.payments = JSON.parse(localStorage.getItem('tutoring_payments_tnd') || '{}');
         state.subjects = JSON.parse(localStorage.getItem('tutoring_subjects_tnd') || '[]');
         normalizeSubjectCatalog();
-        await persistUserData(JSON.parse(JSON.stringify(state)), null);
+        persistedRows = await persistUserData(JSON.parse(JSON.stringify(state)), null);
+      } else {
+        // Référence = contenu RÉEL de la base (et non un recalcul local) : les séances
+        // encore rattachées à un ancien payment_cycle_id seront réécrites, et chaque
+        // cycle référencé par une séance sera bien créé avant celle-ci.
+        persistedRows = toPersistedRows(studentRows, subjectRows, assignmentRows, cycleRows, sessionRows);
       }
-      persistedState = JSON.parse(JSON.stringify(state));
       localStorage.setItem('tutoring_supabase_legacy_import_done', 'true');
       render();
     }
@@ -597,9 +646,11 @@
       return { studentRows, subjectRows, assignmentRows, cycleRows, sessionRows };
     }
 
-    async function persistUserData(snapshot, baseline = persistedState) {
+    // `baseline` = lignes présentes en base (forme de buildUserDataRows), ou null.
+    // Renvoie les lignes écrites, qui deviennent la nouvelle référence.
+    async function persistUserData(snapshot, baseline = persistedRows) {
       const rows = buildUserDataRows(snapshot);
-      const previous = baseline ? buildUserDataRows(baseline) : {
+      const previous = baseline || {
         studentRows: [], subjectRows: [], assignmentRows: [], cycleRows: [], sessionRows: []
       };
       const deferredDeletes = [];
@@ -609,7 +660,9 @@
       await syncOwnedRows('payment_cycles', 'payment_cycle_id', rows.cycleRows, previous.cycleRows, deferredDeletes);
       await syncOwnedRows('student_subjects', 'assignment_id', rows.assignmentRows, previous.assignmentRows, deferredDeletes);
       await syncOwnedRows('sessions', 'session_id', rows.sessionRows, previous.sessionRows, deferredDeletes);
-      for (const deleteObsolete of deferredDeletes) await deleteObsolete();
+      // Suppressions dans l'ordre inverse des dépendances (séances d'abord).
+      for (const deleteObsolete of deferredDeletes.reverse()) await deleteObsolete();
+      return rows;
     }
 
     function saveData() {
@@ -622,8 +675,7 @@
       saveQueue = saveQueue.then(async () => {
         isSavingData = true;
         try {
-          await persistUserData(snapshot);
-          persistedState = snapshot;
+          persistedRows = await persistUserData(snapshot);
         } finally {
           isSavingData = false;
         }
@@ -1086,15 +1138,22 @@
       const time = document.getElementById('sessionTime').value;
       const customRate = parseFloat(document.getElementById('sessionCustomRate').value);
 
-      if (!studentId || !subjectId || !time || isNaN(customRate)) {
+      if (!studentId || !subjectId || isNaN(customRate)) {
         showToast("Saisie invalide pour la séance.", true);
         return;
       }
 
-      const startAt = new Date(`${date}T${time}`);
-      if (Number.isNaN(startAt.getTime())) {
-        showToast("Heure invalide pour la séance.", true);
-        return;
+      // Heure facultative : sans heure, pas de start_at (ni de rappel e-mail).
+      let startAtIso = null;
+      let timeZone = null;
+      if (time) {
+        const startAt = new Date(`${date}T${time}`);
+        if (Number.isNaN(startAt.getTime())) {
+          showToast("Heure invalide pour la séance.", true);
+          return;
+        }
+        startAtIso = startAt.toISOString();
+        timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       }
 
       // Autre matière : aucun blocage. Même matière déjà réglée : on autorise, mais
@@ -1115,8 +1174,8 @@
         if (sess) {
           sess.studentId = studentId;
           sess.subjectId = subjectId;
-          sess.startAt = startAt.toISOString();
-          sess.timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+          sess.startAt = startAtIso;
+          sess.timeZone = timeZone;
           sess.rate = customRate;
           showToast("Séance mise à jour !");
         }
@@ -1125,8 +1184,8 @@
         state.sessions.push({
           id: 'sess_' + Date.now(),
           date: date,
-          startAt: startAt.toISOString(),
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          startAt: startAtIso,
+          timeZone: timeZone,
           studentId: studentId,
           subjectId: subjectId,
           rate: customRate
